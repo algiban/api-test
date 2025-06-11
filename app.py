@@ -7,20 +7,35 @@ from flask_cors import CORS
 import json
 from datetime import datetime
 import os
+import gdown
 
 app = Flask(__name__)
 CORS(app)
 
-# Load model
-model = tf.keras.models.load_model("model/model_buah.h5")
+# --- Setup Model ---
+MODEL_PATH = "model/model_buah.h5"
+GOOGLE_DRIVE_ID = "1ZfRZXMj4qiBSRKookrB3SW5w_IWFrv-S"
+MODEL_DIR = "model"
 
-# Label sesuai model
-labels = ['alpukat', 'anggur', 'apel', 'belimbing', 'blueberry', 'buah naga', 'ceri', 'delima', 'duku', 'durian', 'jambu air', 'jambu biji', 'jeruk', 'kelapa', 'kiwi', 'kurma', 'leci', 'mangga', 'manggis', 'markisa', 'melon', 'nanas', 'nangka', 'pepaya', 'pir', 'pisang', 'rambutan', 'salak', 'sawo', 'semangka', 'sirsak', 'stroberi', 'tomat']
+# Cek apakah model belum ada → download sekali
+if not os.path.exists(MODEL_PATH):
+    os.makedirs(MODEL_DIR, exist_ok=True)
+    url = f"https://drive.google.com/uc?id={GOOGLE_DRIVE_ID}"
+    gdown.download(url, MODEL_PATH, quiet=False)
 
-# Path file JSON
+# Load model setelah terdownload
+model = tf.keras.models.load_model(MODEL_PATH)
+
+# Label hasil training (urutan harus sesuai dengan model)
+labels = ['alpukat', 'anggur', 'apel', 'belimbing', 'blueberry', 'buah naga', 'ceri', 'delima', 'duku', 'durian',
+          'jambu air', 'jambu biji', 'jeruk', 'kelapa', 'kiwi', 'kurma', 'leci', 'mangga', 'manggis', 'markisa',
+          'melon', 'nanas', 'nangka', 'pepaya', 'pir', 'pisang', 'rambutan', 'salak', 'sawo', 'semangka',
+          'sirsak', 'stroberi', 'tomat']
+
+# File penyimpanan hasil prediksi
 JSON_FILE = 'predictions.json'
 
-# Fungsi menyimpan hasil prediksi ke file JSON
+# Fungsi simpan hasil prediksi ke file
 def save_prediction_to_json(label, confidence):
     data = {
         "label": label,
@@ -29,19 +44,20 @@ def save_prediction_to_json(label, confidence):
     }
 
     if os.path.exists(JSON_FILE):
-        with open(JSON_FILE, 'r') as f:
-            try:
+        try:
+            with open(JSON_FILE, 'r') as f:
                 existing_data = json.load(f)
-            except json.JSONDecodeError:
-                existing_data = []
+        except json.JSONDecodeError:
+            existing_data = []
     else:
         existing_data = []
 
-    existing_data.insert(0, data)  # Tambahkan data terbaru di awal
+    existing_data.insert(0, data)
 
     with open(JSON_FILE, 'w') as f:
         json.dump(existing_data, f, indent=4)
 
+# --- Routes ---
 @app.route('/')
 def index():
     return "hello world"
@@ -58,11 +74,10 @@ def predict():
         img = np.expand_dims(img, axis=0)
 
         predictions = model.predict(img)
-        class_index = np.argmax(predictions)
+        class_index = int(np.argmax(predictions))
         confidence = float(np.max(predictions))
         predicted_label = labels[class_index]
 
-        # Simpan ke file JSON
         save_prediction_to_json(predicted_label, confidence)
 
         return jsonify({
@@ -76,13 +91,13 @@ def predict():
 @app.route('/history', methods=['GET'])
 def history():
     if not os.path.exists(JSON_FILE):
-        return jsonify([])  # Jika file tidak ada, kembalikan list kosong
+        return jsonify([])
 
-    with open(JSON_FILE, 'r') as f:
-        try:
+    try:
+        with open(JSON_FILE, 'r') as f:
             data = json.load(f)
-        except json.JSONDecodeError:
-            data = []
+    except json.JSONDecodeError:
+        data = []
 
     return jsonify(data)
 
